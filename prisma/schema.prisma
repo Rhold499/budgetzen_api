@@ -1,0 +1,407 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  SUPERADMIN
+  ADMIN
+  MEMBER
+  USER
+}
+
+enum PlanType {
+  FREE
+  FAMILY
+  PRO
+  ENTERPRISE
+}
+
+enum TransactionStatus {
+  PENDING
+  VALIDATED
+  REJECTED
+  FAILED
+}
+
+enum TransactionType {
+  DEBIT
+  CREDIT
+  TRANSFER
+  DEPOSIT
+  WITHDRAWAL
+  PAYMENT
+}
+
+enum AccountType {
+  CHECKING
+  SAVINGS
+  BUSINESS
+  FAMILY
+  CRYPTO // Ajouté pour support futur crypto
+}
+
+enum CategoryType {
+  INCOME
+  EXPENSE
+  BOTH
+}
+
+enum GoalStatus {
+  ACTIVE
+  COMPLETED
+  PAUSED
+  CANCELLED
+}
+
+model GlobalSetting {
+  id        String   @id @default("global")
+  emailTemplates Json @default("{}")
+  securityRules  Json @default("{}")
+  features       Json @default("{}")
+  systemSettings Json @default("{}")
+  updatedAt      DateTime @updatedAt
+  createdAt      DateTime @default(now())
+}
+
+model Tenant {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  subdomain   String?  @unique
+  planType    PlanType @default(FREE)
+  isActive    Boolean  @default(true)
+  settings    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  users       User[]
+  accounts    Account[]
+  transactions Transaction[]
+  reports     Report[]
+  categories  Category[]
+  budgets     Budget[]
+  goals       Goal[]
+  userTenants UserTenant[]
+  webhookSubscriptions WebhookSubscription[]
+  bankConnections BankConnection[]
+
+  @@map("tenants")
+}
+
+model User {
+  id          String   @id @default(uuid()) @db.Uuid
+  email       String   @unique
+  firstName   String
+  lastName    String
+  role        UserRole @default(USER)
+  isActive    Boolean  @default(true)
+  lastLoginAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  password    String   // <-- Ajouté pour l'authentification
+
+  // Multi-tenant (optionnel pour superadmin)
+  tenantId    String?   @db.Uuid
+  tenant      Tenant?   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Relations
+  accounts         Account[]
+  transactions     Transaction[]
+  createdReports   Report[]
+  auditLogs        AuditLog[]
+  createdCategories Category[]
+  createdBudgets   Budget[]
+  createdGoals     Goal[]
+  userTenants      UserTenant[]
+
+  @@map("users")
+}
+
+model Account {
+  id          String      @id @default(uuid()) @db.Uuid
+  name        String
+  type        AccountType @default(CHECKING)
+  balance     Decimal     @default(0) @db.Decimal(15, 2)
+  currency    String      @default("EUR")
+  isActive    Boolean     @default(true)
+  description String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  address     String?     // Adresse wallet pour les comptes crypto
+
+  // Multi-tenant
+  tenantId    String      @db.Uuid
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Owner
+  ownerId     String      @db.Uuid
+  owner       User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  // Relations
+  debitTransactions  Transaction[] @relation("DebitAccount")
+  creditTransactions Transaction[] @relation("CreditAccount")
+
+  @@map("accounts")
+}
+
+model Category {
+  id          String       @id @default(uuid()) @db.Uuid
+  name        String
+  description String?
+  color       String?      @default("#6B7280")
+  icon        String?
+  type        CategoryType @default(BOTH)
+  isActive    Boolean      @default(true)
+  isDefault   Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  // Multi-tenant
+  tenantId    String       @db.Uuid
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Creator
+  createdById String       @db.Uuid
+  createdBy   User         @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  // Relations
+  transactions Transaction[]
+  budgets     Budget[]
+
+  @@unique([tenantId, name])
+  @@map("categories")
+}
+
+model Budget {
+  id          String   @id @default(uuid()) @db.Uuid
+  amount      Decimal  @db.Decimal(15, 2)
+  currency    String   @default("EUR")
+  month       Int      // 1-12
+  year        Int
+  spent       Decimal  @default(0) @db.Decimal(15, 2)
+  isActive    Boolean  @default(true)
+  alertAt     Decimal? @db.Decimal(5, 2) // Percentage (0.8 = 80%)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Multi-tenant
+  tenantId    String   @db.Uuid
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Category
+  categoryId  String   @db.Uuid
+  category    Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  // Creator
+  createdById String   @db.Uuid
+  createdBy   User     @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, categoryId, month, year])
+  @@map("budgets")
+}
+
+model Goal {
+  id            String     @id @default(uuid()) @db.Uuid
+  title         String
+  description   String?
+  targetAmount  Decimal    @db.Decimal(15, 2)
+  currentAmount Decimal    @default(0) @db.Decimal(15, 2)
+  currency      String     @default("EUR")
+  targetDate    DateTime?
+  status        GoalStatus @default(ACTIVE)
+  priority      Int        @default(1) // 1=High, 2=Medium, 3=Low
+  isPublic      Boolean    @default(false)
+  metadata      Json?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  // Multi-tenant
+  tenantId      String     @db.Uuid
+  tenant        Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Creator
+  createdById   String     @db.Uuid
+  createdBy     User       @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  // Relations
+  contributions GoalContribution[]
+
+  @@map("goals")
+}
+
+model GoalContribution {
+  id            String   @id @default(uuid()) @db.Uuid
+  amount        Decimal  @db.Decimal(15, 2)
+  description   String?
+  createdAt     DateTime @default(now())
+
+  goalId        String   @db.Uuid
+  goal          Goal     @relation(fields: [goalId], references: [id], onDelete: Cascade)
+
+  transactionId String?  @db.Uuid
+  transaction   Transaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+
+  @@map("goal_contributions")
+}
+
+model Transaction {
+  id          String            @id @default(uuid()) @db.Uuid
+  amount      Decimal           @db.Decimal(15, 2)
+  currency    String            @default("EUR")
+  type        TransactionType
+  status      TransactionStatus @default(PENDING)
+  description String?
+  reference   String?           @unique
+  metadata    Json?
+  receiptUrl  String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  network     String?           // Réseau blockchain (ex: ethereum, bitcoin) pour les transactions crypto
+
+  // Multi-tenant
+  tenantId    String            @db.Uuid
+  tenant      Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Creator
+  createdById String            @db.Uuid
+  createdBy   User              @relation(fields: [createdById], references: [id])
+
+  // Accounts
+  debitAccountId  String?       @db.Uuid
+  debitAccount    Account?        @relation("DebitAccount", fields: [debitAccountId], references: [id])
+  creditAccountId String?       @db.Uuid
+  creditAccount   Account?        @relation("CreditAccount", fields: [creditAccountId], references: [id])
+
+  // Category
+  categoryId      String?       @db.Uuid
+  category        Category?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  // Relations
+  auditLogs       AuditLog[]
+  goalContributions GoalContribution[]
+
+  @@map("transactions")
+}
+
+model Report {
+  id          String   @id @default(uuid()) @db.Uuid
+  title       String
+  type        String
+  filters     Json?
+  data        Json?
+  fileUrl     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Multi-tenant
+  tenantId    String   @db.Uuid
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Creator
+  createdById String   @db.Uuid
+  createdBy   User     @relation(fields: [createdById], references: [id])
+
+  @@map("reports")
+}
+
+model AuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  action      String
+  entityType  String
+  entityId    String
+  oldValues   Json?
+  newValues   Json?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  // User
+  userId      String?  @db.Uuid
+  user        User?    @relation(fields: [userId], references: [id])
+
+  // Transaction (if applicable)
+  transactionId String? @db.Uuid
+  transaction   Transaction? @relation(fields: [transactionId], references: [id])
+
+  @@map("audit_logs")
+}
+
+model UserTenant {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  tenantId  String   @db.Uuid
+  role      String   // enum possible: 'admin', 'member', 'family_member', etc.
+  status    String   // enum possible: 'active', 'pending', 'removed'
+  joinedAt  DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id])
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([userId, tenantId])
+}
+
+model WebhookSubscription {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @db.Uuid
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  url        String
+  events     Json     @default("[]")
+  secret     String
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  deliveries WebhookDelivery[]
+
+  @@map("webhook_subscriptions")
+  @@index([tenantId])
+}
+
+model WebhookDelivery {
+  id              String   @id @default(uuid()) @db.Uuid
+  subscriptionId  String   @db.Uuid
+  subscription    WebhookSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  eventId         String
+  status          String   // 'success' | 'failed'
+  errorMessage    String?
+  createdAt       DateTime @default(now())
+
+  @@map("webhook_deliveries")
+  @@index([subscriptionId])
+}
+
+model BankConnection {
+  id              String   @id @default(uuid()) @db.Uuid
+  tenantId        String   @db.Uuid
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  bankName        String
+  accountNumber   String?
+  connectionType  String   // 'open_banking', 'scraping', 'manual'
+  credentials     Json     @default("{}")
+  isActive        Boolean  @default(true)
+  lastSync        DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("bank_connections")
+  @@index([tenantId])
+  @@index([isActive])
+}
+
+model Plan {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  type      PlanType
+  limits    Json     @default("{}")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
