@@ -11,7 +11,7 @@ async function bootstrap() {
     const configService = app.get(config_1.ConfigService);
     app.use((0, helmet_1.default)());
     app.enableCors({
-        origin: process.env.NODE_ENV === 'production' ? ['https://yourdomain.com'] : true,
+        origin: process.env.NODE_ENV === 'production' ? ['http://localhost:3001', 'http://127.0.0.1:3001'] : true,
         credentials: true,
     });
     const apiPrefix = configService.get('API_PREFIX', 'api/v1');

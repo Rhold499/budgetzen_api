@@ -13,7 +13,7 @@ async function bootstrap() {
   app.use(helmet());
   app.enableCors({
     origin:
-      process.env.NODE_ENV === 'production' ? ['https://yourdomain.com'] : true,
+      process.env.NODE_ENV === 'production' ? ['http://localhost:3001', 'http://127.0.0.1:3001'] : true,
     credentials: true,
   });
 
