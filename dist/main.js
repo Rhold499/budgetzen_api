@@ -11,7 +11,13 @@ async function bootstrap() {
     const configService = app.get(config_1.ConfigService);
     app.use((0, helmet_1.default)());
     app.enableCors({
+<<<<<<< HEAD
         origin: process.env.NODE_ENV === 'production' ? ['http://localhost:3001', 'http://127.0.0.1:3001'] : true,
+=======
+        origin: process.env.NODE_ENV === 'production'
+            ? ['http://localhost:3001', 'http://127.0.0.1:3001']
+            : true,
+>>>>>>> ee4733e (fix: use dynamic port and 0.0.0.0 for Railway)
         credentials: true,
     });
     const apiPrefix = configService.get('API_PREFIX', 'api/v1');
@@ -45,8 +51,13 @@ async function bootstrap() {
         .build();
     const document = swagger_1.SwaggerModule.createDocument(app, config);
     swagger_1.SwaggerModule.setup(`${apiPrefix}/docs`, app, document);
+<<<<<<< HEAD
     const port = configService.get('PORT', 3000);
     await app.listen(port);
+=======
+    const port = process.env.PORT || configService.get('PORT', '3000');
+    await app.listen(port, '0.0.0.0');
+>>>>>>> ee4733e (fix: use dynamic port and 0.0.0.0 for Railway)
     console.log(`🚀 Application is running on: http://localhost:${port}/${apiPrefix}`);
     console.log(`📚 Swagger documentation: http://localhost:${port}/${apiPrefix}/docs`);
 }

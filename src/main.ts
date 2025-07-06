@@ -13,7 +13,9 @@ async function bootstrap() {
   app.use(helmet());
   app.enableCors({
     origin:
-      process.env.NODE_ENV === 'production' ? ['http://localhost:3001', 'http://127.0.0.1:3001'] : true,
+      process.env.NODE_ENV === 'production'
+        ? ['http://localhost:3001', 'http://127.0.0.1:3001']
+        : true,
     credentials: true,
   });
 
@@ -57,8 +59,8 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup(`${apiPrefix}/docs`, app, document);
 
-  const port = configService.get('PORT', 3000);
-  await app.listen(port);
+  const port = process.env.PORT || configService.get('PORT', '3000'); // ✅ Important pour Railway
+  await app.listen(port, '0.0.0.0'); // ✅ Important pour Railway
 
   console.log(
     `🚀 Application is running on: http://localhost:${port}/${apiPrefix}`,
@@ -69,3 +71,4 @@ async function bootstrap() {
 }
 
 bootstrap();
+
