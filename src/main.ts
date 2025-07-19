@@ -14,7 +14,7 @@ async function bootstrap() {
   app.enableCors({
     origin:
       process.env.NODE_ENV === 'production'
-        ? ['https://phi-admin-panel-ruddy.vercel.app/', 'https://ton-projet.up.railway.app']
+        ? ['https://phi-admin-panel-ruddy.vercel.app', 'http://localhost:3001']
         : ['http://localhost:3000', 'http://localhost:3001'],
     credentials: true,
   });
