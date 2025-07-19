@@ -14,13 +14,13 @@ async function bootstrap() {
   app.enableCors({
     origin:
       process.env.NODE_ENV === 'production'
-        ? ['http://localhost:3001', 'http://127.0.0.1:3001']
-        : true,
+        ? ['https://ton-domaine.com', 'https://ton-projet.up.railway.app']
+        : ['http://localhost:3000', 'http://localhost:3001'],
     credentials: true,
   });
 
   // Global prefix
-  const apiPrefix = configService.get('API_PREFIX', 'api/v1');
+  const apiPrefix: string = configService.get('API_PREFIX', 'api/v1');
   app.setGlobalPrefix(apiPrefix);
 
   // Global validation pipe
@@ -37,7 +37,7 @@ async function bootstrap() {
 
   // Swagger documentation
   const config = new DocumentBuilder()
-    .setTitle('Financial SaaS API')
+    .setTitle('financial API')
     .setDescription('Multi-tenant financial transaction management platform')
     .setVersion('1.0')
     .addBearerAuth()
@@ -70,5 +70,4 @@ async function bootstrap() {
   );
 }
 
-bootstrap();
-
+void bootstrap();
